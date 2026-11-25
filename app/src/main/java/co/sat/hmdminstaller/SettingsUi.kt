@@ -1,0 +1,236 @@
+package co.sat.hmdminstaller
+
+import android.content.Context
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
+import android.text.InputType
+import android.text.TextUtils
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.annotation.ColorRes
+import androidx.annotation.DimenRes
+import androidx.core.content.ContextCompat
+import com.google.android.material.button.MaterialButton
+
+/** Ukuran dp -> piksel. Dipakai bersama oleh semua tampilan yang dibuat lewat kode. */
+internal fun Context.dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+/** Ukuran dari dimens.xml dalam piksel. */
+internal fun Context.px(@DimenRes id: Int): Int = resources.getDimensionPixelSize(id)
+
+/** Atur ukuran teks dari dimens.xml (skala 12 · 14 · 16 · 18 · 20 sp), tetap mengikuti ukuran font pengguna. */
+internal fun TextView.setTextSizeRes(@DimenRes id: Int) =
+    setTextSize(TypedValue.COMPLEX_UNIT_PX, resources.getDimension(id))
+
+/** Warna dari colors.xml. */
+internal fun Context.colorOf(@ColorRes id: Int): Int = ContextCompat.getColor(this, id)
+
+/**
+ * Pembuat komponen untuk dialog pengaturan (Model Perangkat, Aplikasi dan Versi) dan daftar yang dibuat lewat kode.
+ * Warna dan ukuran diambil dari resource supaya sama dengan layar utama.
+ */
+internal class SettingsUi(private val ctx: Context) {
+
+    val cText = ctx.colorOf(R.color.accent_text)
+    val cMuted = ctx.colorOf(R.color.muted)
+    val cSurface = ctx.colorOf(R.color.surface)
+    val cOutline = ctx.colorOf(R.color.outline)
+    val cChip = ctx.colorOf(R.color.chip_bg)
+    val cStroke = ctx.colorOf(R.color.stroke)
+    val cSoft = ctx.colorOf(R.color.accent_text_soft)
+    val cMain = ctx.colorOf(R.color.btn_main)
+    val cOnMain = ctx.colorOf(R.color.on_tab_button)
+    val cDanger = ctx.colorOf(R.color.danger)
+    val cEdit = ctx.colorOf(R.color.icon_edit)
+
+    private val match = ViewGroup.LayoutParams.MATCH_PARENT
+    private val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
+
+    fun rounded(fill: Int, stroke: Int? = null, @DimenRes radius: Int = R.dimen.radius_sm): GradientDrawable =
+        GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = ctx.resources.getDimension(radius)
+            setColor(fill)
+            if (stroke != null) setStroke(ctx.px(R.dimen.stroke_width), stroke)
+        }
+
+    /** Lebar penuh dengan jarak atas dari dimens [top]; tinggi [h] (default menyesuaikan isi). */
+    fun lpTop(@DimenRes top: Int, h: Int = wrap) = LinearLayout.LayoutParams(match, h).apply { topMargin = ctx.px(top) }
+
+    /** Untuk kolom isian di dalam popup. */
+    fun lpField(@DimenRes top: Int = R.dimen.space_sm) = lpTop(top, ctx.px(R.dimen.control_height))
+
+    fun label(
+        s: String,
+        bold: Boolean = false,
+        @DimenRes size: Int = R.dimen.text_caption,
+        color: Int = cMuted
+    ) = TextView(ctx).apply {
+        text = s
+        setTextSizeRes(size)
+        setTextColor(color)
+        setLineSpacing(0f, 1.25f)
+        if (bold) setTypeface(typeface, Typeface.BOLD)
+    }
+
+    /** Judul kecil huruf besar di atas daftar/kelompok. */
+    fun sectionLabel(s: String) =
+        label(s, bold = true, size = R.dimen.text_body, color = cText).apply { letterSpacing = 0.08f }
+
+    fun field(placeholder: String, value: String, capitalize: Boolean = false) = EditText(ctx).apply {
+        setText(value)
+        hint = placeholder
+        setTextSizeRes(R.dimen.text_body)
+        setTextColor(cText)
+        setHintTextColor(cMuted)
+        isSingleLine = true
+        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or
+            (if (capitalize) InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS else 0)
+        background = rounded(cSurface, cOutline, R.dimen.radius_md)
+        ctx.px(R.dimen.space_md).let { setPadding(it, 0, it, 0) }
+    }
+
+    /** Tombol utama (terisi navy) dengan ikon tambah. Warna mengikuti tema (Widget.Hmdm.Button). */
+    fun addButton(text: String) = MaterialButton(ctx).apply {
+        this.text = text
+        setIconResource(R.drawable.ic_add)
+        iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+        iconPadding = ctx.px(R.dimen.space_sm)
+    }
+
+    /** Tombol bingkai (Widget.Hmdm.Button.Outlined) dengan ikon di kiri teks. */
+    fun outlinedButton(text: String, icon: Int) =
+        MaterialButton(ctx, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+            this.text = text
+            setIconResource(icon)
+            iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+            iconPadding = ctx.px(R.dimen.space_sm)
+        }
+
+    /** Tombol ikon (icon_button_size): latar membulat berwarna lembut dari [tint], efek ketuk (ripple). */
+    fun iconButton(res: Int, tint: Int, desc: String, onClick: () -> Unit) = ImageView(ctx).apply {
+        setImageResource(res)
+        imageTintList = ColorStateList.valueOf(tint)
+        contentDescription = desc
+        scaleType = ImageView.ScaleType.CENTER_INSIDE
+        ctx.px(R.dimen.icon_button_padding).let { setPadding(it, it, it, it) }
+        background = RippleDrawable(
+            ColorStateList.valueOf(Color.argb(60, Color.red(tint), Color.green(tint), Color.blue(tint))),
+            rounded(Color.argb(32, Color.red(tint), Color.green(tint), Color.blue(tint))),
+            null
+        )
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { onClick() }
+    }
+
+    /**
+     * Satu baris daftar: judul + lencana di kiri, tombol aksi di kanan.
+     * [badgeMuted] true = lencana abu-abu (mis. "tanpa cek versi"), false = lencana aksen.
+     */
+    fun itemCard(title: String, badge: String, badgeMuted: Boolean, vararg actions: View): LinearLayout {
+        val name = label(title, bold = true, size = R.dimen.text_body, color = cText).apply {
+            isSingleLine = true
+            ellipsize = TextUtils.TruncateAt.MIDDLE
+        }
+        val badgeView = TextView(ctx).apply {
+            text = badge
+            setTextSizeRes(R.dimen.text_caption)
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(if (badgeMuted) cMuted else cText)
+            background = rounded(if (badgeMuted) cChip else cSoft, null, R.dimen.radius_xs)
+            setPadding(
+                ctx.px(R.dimen.space_md), ctx.px(R.dimen.space_xs),
+                ctx.px(R.dimen.space_md), ctx.px(R.dimen.space_xs)
+            )
+        }
+        val textCol = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(name)
+            addView(badgeView, LinearLayout.LayoutParams(wrap, wrap).apply { topMargin = ctx.px(R.dimen.space_sm) })
+        }
+        val size = ctx.px(R.dimen.icon_button_size)
+        return LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = rounded(cSurface, cStroke, R.dimen.radius_lg)
+            setPadding(
+                ctx.px(R.dimen.card_padding), ctx.px(R.dimen.space_md),
+                ctx.px(R.dimen.space_sm), ctx.px(R.dimen.space_md)
+            )
+            addView(textCol, LinearLayout.LayoutParams(0, wrap, 1f))
+            for (a in actions) {
+                addView(a, LinearLayout.LayoutParams(size, size).apply { marginStart = ctx.px(R.dimen.space_sm) })
+            }
+        }
+    }
+
+    class Segment(val view: LinearLayout, val refresh: () -> Unit)
+
+    /**
+     * Pilihan jenis perangkat berbentuk tombol segmen (POS / TABLET / PDA).
+     * [onSelect] dipanggil hanya bila jenis yang diketuk berbeda dari [selected]; tampilan diperbarui setelahnya.
+     */
+    fun typeSegment(types: List<String>, selected: () -> String, onSelect: (String) -> Unit): Segment {
+        val chips = LinkedHashMap<String, TextView>()
+        val refresh: () -> Unit = {
+            for ((t, tv) in chips) {
+                val sel = t == selected()
+                tv.background = if (sel) rounded(cMain) else null
+                tv.setTextColor(if (sel) cOnMain else cMuted)
+            }
+        }
+        val row = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = rounded(cChip, null, R.dimen.radius_md)
+            ctx.px(R.dimen.space_xs).let { setPadding(it, it, it, it) }
+            for (t in types) {
+                val tv = TextView(ctx).apply {
+                    text = t
+                    gravity = Gravity.CENTER
+                    setTextSizeRes(R.dimen.text_body)
+                    setTypeface(typeface, Typeface.BOLD)
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener {
+                        if (t == selected()) return@setOnClickListener
+                        onSelect(t)
+                        refresh()
+                    }
+                }
+                chips[t] = tv
+                addView(tv, LinearLayout.LayoutParams(0, ctx.px(R.dimen.segment_height), 1f))
+            }
+        }
+        refresh()
+        return Segment(row, refresh)
+    }
+
+    /** Badan dialog pengaturan: jenis perangkat, tombol tambah, tombol Export/Import, lalu [list]. */
+    fun body(typeRow: View, btnAdd: View, btnExport: View, btnImport: View, list: View): LinearLayout {
+        val h = ctx.px(R.dimen.control_height)
+        val io = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(btnExport, LinearLayout.LayoutParams(0, h, 1f))
+            addView(btnImport, LinearLayout.LayoutParams(0, h, 1f).apply { marginStart = ctx.px(R.dimen.space_sm) })
+        }
+        return LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, ctx.px(R.dimen.space_xs), 0, 0)
+            addView(sectionLabel("JENIS PERANGKAT"))
+            addView(typeRow, lpTop(R.dimen.space_md))
+            addView(btnAdd, lpTop(R.dimen.space_md, h))
+            addView(io, lpTop(R.dimen.space_sm, h))
+            addView(list)
+        }
+    }
+}

@@ -1,0 +1,126 @@
+# HMDM Installer (Android)
+
+Port dari HMDM ADB Installer v3 (Windows) ke aplikasi Android. HP teknisi menjadi "komputer ADB":
+pair + connect lewat Wireless debugging ke HP target, memasang APK, lalu `dpm set-device-owner`.
+Tidak butuh adb.exe / PC.
+
+## Cara membangun APK
+**Opsi A – Android Studio:** File › Open folder ini › tunggu sync › Build › Build APK(s).
+Hasil: `app/build/outputs/apk/debug/app-debug.apk`.
+
+**Opsi B – GitHub Actions:** lihat bagian *Build rilis* di bawah (workflow kini membuat APK rilis bertanda tangan, bukan debug).
+
+## Build rilis (bertanda tangan)
+APK debug bisa dibaca lewat `run-as` (kunci ADB dan hash PIN), jadi untuk dipakai teknisi gunakan build rilis.
+1. Buat keystore sekali saja dan simpan cadangannya (bila hilang, aplikasi tidak bisa diperbarui):
+   `keytool -genkeypair -v -keystore hmdm-release.jks -alias hmdm -keyalg RSA -keysize 2048 -validity 10000`
+2. Di GitHub: Settings › Secrets and variables › Actions, isi `HMDM_KEYSTORE_B64` (`base64 -w0 hmdm-release.jks`),
+   `HMDM_KEYSTORE_PASSWORD`, `HMDM_KEY_ALIAS`, `HMDM_KEY_PASSWORD`.
+3. Actions › "Build APK" › Run workflow (atau push tag `v*`). Artifact: `HMDM-Installer-release-apk`.
+4. Lokal: ekspor `HMDM_KEYSTORE_FILE` (path), `HMDM_KEYSTORE_PASSWORD`, `HMDM_KEY_ALIAS`, `HMDM_KEY_PASSWORD`, lalu
+   `gradle :app:assembleRelease`.
+5. APK debug dan rilis berbeda tanda tangan: uninstall versi debug dulu. Kunci ADB dibuat ulang, jadi HP target perlu di-pair ulang.
+
+## Cara pakai
+1. Pasang APK ini di HP teknisi (izinkan "install dari sumber tidak dikenal").
+2. HP target: Opsi Developer › Wireless debugging (satu Wi-Fi dengan HP teknisi) › "Pair device with pairing code".
+3. Isi IP, Port pairing, kode › **Pair**. Lalu isi IP + Port connect (layar utama Wireless debugging) › **Connect**.
+   **Alternatif tanpa mengetik: Pair dengan QR.** Ketuk **Pair dengan QR code (scan)** → QR tampil di HP teknisi. Di HP target: Wireless debugging › *Pair device with QR code* › arahkan kamera ke QR itu. Aplikasi menemukan IP/port pairing lewat mDNS, mengisi kolom IP, port, dan kode pairing otomatis, melakukan Pair, lalu mencari port connect dan Connect otomatis (bila port tidak ketemu, isi manual lalu Connect). Butuh satu jaringan Wi-Fi yang mengizinkan mDNS (client isolation harus mati). Memakai library zxing-core untuk membuat QR.
+4. **1 · Instalasi Aplikasi**: ketuk area "Pilih File APK Di Sini" (bisa banyak file). Daftar aplikasi yang akan dipasang (nama + ukuran) tampil di bawahnya; ketuk ikon tempat sampah untuk membuang satu APK dari daftar. Lalu **Pasang Aplikasi**.
+5. **2 · Atur Hak Akses**: pastikan semua akun (Google dan lainnya) di HP target sudah dihapus, cek Status MDM Mode, lalu **Aktifkan MDM Mode**.
+6. Atau pakai **Proses Otomatis** (hanya Pasang Aplikasi + Aktifkan MDM Mode; Pair & Connect harus sudah dilakukan lebih dulu). Kartu **Uninstall Aplikasi Kaspersky** berisi 3 langkah: hapus data, matikan Aplikasi Admin Kaspersky di HP (manual), lalu uninstall.
+
+Selama belum terhubung (Pair+Connect / USB), tombol **Pasang Aplikasi**, **Aktifkan MDM Mode**, **Pasang Aplikasi + Aktifkan MDM Mode**, **Hapus Data Aplikasi Kaspersky** dan **Uninstall Aplikasi Kaspersky** nonaktif (redup, tidak bisa ditekan); otomatis aktif setelah terhubung dan nonaktif lagi bila koneksi terputus.
+
+Syarat device owner: HP target baru / habis factory reset dan belum ada akun (Google dll).
+Satu HP tidak bisa memasang dirinya sendiri sebagai device owner dengan cara ini kecuali IP diisi 127.0.0.1 dan
+syarat di atas terpenuhi.
+
+## Pengaturan aplikasi & versi
+Ketuk ikon **gerigi** di kartu **Informasi Status** (pojok kanan atas kartu) untuk mengubah daftar aplikasi dan versi yang diharapkan pada ceklist Status Instalasi, tanpa build ulang.
+- Ikon **+** di samping gerigi (kartu Informasi Status) membuka Pengaturan Model Perangkat (tampilan sama dengan Pengaturan Aplikasi dan Versi): tambah/hapus model per jenis (disimpan di `ModelStore.kt`), dengan tombol Export/Import JSON (`model-perangkat.json`); hasil Import baru berlaku setelah Simpan.
+- Saat **Cek Status** ditekan, model HP target dibaca (`ro.product.model`) dan jenis dipilih otomatis sesuai daftar di Pengaturan Model Perangkat (daftar bawaan kosong; isi sendiri atau Import). Model di luar daftar ditampilkan "tidak dikenal"; Status Instalasi dan Status Izin tetap "Belum diperiksa" (perintah cek tidak dijalankan) sampai model ditambahkan ke daftar lalu **Cek Status** ditekan lagi.
+- Pilih jenis perangkat (POS / TABLET / PDA), ubah kolom versionName per aplikasi. Kolom kosong = aplikasi hanya dicek terpasang.
+- **+ Tambah aplikasi**: isi nama paket (mis. `com.contoh.app`) dan versi (wajib diisi). Setelah ditambahkan, versi bisa dikosongkan lewat ikon pensil (aplikasi hanya dicek terpasang).
+- Ikon **sampah** di samping tiap aplikasi: hapus dari daftar jenis itu.
+- **Reset ke bawaan** mengembalikan daftar dan versi jenis yang dipilih ke nilai di `DeviceCatalog.kt` (`DEVICE_PACKAGES`, `EXPECTED_VERSIONS`).
+- Semua perubahan baru disimpan saat menekan **Simpan** (Batal = dibuang). Penyimpanan: `VersionStore.kt`.
+
+## Opsi USB debugging (kabel)
+Alternatif tanpa Wi-Fi / Pair:
+1. HP target: Opsi Developer › aktifkan **USB debugging** (mode USB: Transfer file).
+2. Colok HP target ke HP teknisi memakai kabel OTG (HP teknisi = USB host).
+3. Di kartu **USB Debugging (Kabel)** ketuk **Pilih Perangkat**; izinkan akses USB di HP teknisi, lalu di HP target
+   setujui dialog "Izinkan USB debugging?" (centang "Selalu izinkan").
+4. Lanjut seperti biasa: Pasang APK, set-device-owner, atau Proses Otomatis.
+Cara kerja: paket ADB dikirim lewat soket loopback lalu diteruskan ke endpoint bulk USB (`UsbAdbBridge.kt`).
+
+## Login PIN
+- PIN 4 digit. PIN awal: **4321** (dibuat otomatis saat pertama kali dibuka). Untuk mengganti PIN, ubah `DEFAULT_PIN` di `PinStore.kt` lalu build ulang.
+- Setelah itu setiap buka aplikasi harus memasukkan PIN (otomatis diperiksa setelah digit ke-4; PIN benar langsung masuk).
+- Tombol **Keluar** (header) meminta konfirmasi, lalu memutus koneksi ADB, menghentikan service, mengosongkan daftar APK, lalu menutup aplikasi (daftar APK juga selalu dikosongkan saat aplikasi dibuka baru; hanya dipulihkan bila Android membuat ulang layar setelah proses dimatikan sistem) dan menghapusnya dari daftar aplikasi terbaru. Aplikasi tetap terkunci PIN saat dibuka kembali.
+- **Timer sesi** di status bar header menghitung mundur 30 menit sejak login (TIDAK direset oleh sentuhan layar; ditahan/di-pause di sisa waktu
+  saat operasi install/pair berjalan, lalu lanjut menghitung setelah selesai, tidak direset ke 30 menit). Habis → terkunci otomatis. Batas waktu: `LOCK_TIMEOUT_MS` di `MainActivity.kt`.
+- Salah 5x berturut-turut → terkunci sementara (30 dtk, lalu 1, 2, 4 mnt ... maks 15 mnt).
+- PIN disimpan sebagai hash PBKDF2-SHA256 + salt (`PinStore.kt`), bukan teks asli.
+- Kunci terkunci sementara lalu HP di-reboot: lama kunci diulang penuh setelah reboot (mengubah jam sistem tidak mempercepatnya).
+- Kunci privat ADB (`adb_key.pk8`) dibungkus AES-GCM dengan kunci Android Keystore (`KeyVault.kt`). Bila Keystore di HP tidak bisa dipakai, kunci disimpan seperti biasa. Kunci lama (teks biasa) otomatis dibungkus saat aplikasi dibuka. Bila bungkusan tidak bisa dibuka (mis. data aplikasi dipulihkan ke HP lain), kunci ADB dibuat ulang dan HP target harus di-pair ulang.
+
+## Format log
+Setiap proses tampil sebagai satu blok berwarna: judul + jam, isi, lalu penutup berisi nama proses dan lama waktunya.
+```
+── Pasang Aplikasi · 14:02:11
+[1/2] hmdm-launcher.apk (12.3 MB)
+> adb install -r hmdm-launcher.apk
+✓ Terpasang · 4.2 dtk
+[2/2] agent.apk (3.1 MB)
+> adb install -r agent.apk
+✗ Gagal: versi lebih rendah dari yang terpasang (INSTALL_FAILED_VERSION_DOWNGRADE)
+Ringkasan: 1 berhasil, 1 gagal dari 2 APK
+✗ agent.apk: versi lebih rendah dari yang terpasang
+✗ Gagal: Pasang Aplikasi · 6.0 dtk
+```
+Contoh proses Pair (manual): IP connect terisi otomatis dari IP pairing, port connect diisi teknisi.
+```
+── Pair · 14:01:40
+> adb pair 192.168.1.20:37215 ******
+✓ Pairing berhasil: 192.168.1.20:37215
+IP connect diisi otomatis: 192.168.1.20
+Berikutnya: isi port connect (layar utama Wireless debugging HP target), lalu ketuk "Connect"
+✓ Selesai: Pair · 1.3 dtk
+```
+Output mentah HP target (baris rincian) hanya ditampilkan bila menambah informasi: stack trace, baris "Performing ...", dan baris yang mengulang alasan di atasnya dibuang. Proses baru selalu didahului satu baris kosong. Baris yang terlipat sejajar dengan isi pesan.
+
+Penyebab teknis (alasan putus koneksi, galat tak terduga, jejak crash) tampil di baris rincian abu-abu di bawah baris ✗ / !, bukan di dalamnya. Baris rincian yang terlalu panjang dipotong dan diakhiri "…".
+
+Nama tombol di pesan log, popup, dan Toast ditulis dengan kutip ganda (ketuk "Cek Status"); penyebab putus koneksi di popup berbahasa sehari-hari, rincian teknisnya hanya di log.
+
+Popup gagal memecah baris ✗: alasan singkat menjadi butir "Penyebab", kalimat saran menjadi "Langkah berikutnya", lalu daftar "Periksa".
+
+Frasa yang berulang (cara menyambung, petunjuk setelah terhubung dan setelah Pair, petunjuk Connect manual, alasan Pair dengan QR habis waktu, penutup "Rincian lengkap ada di log", peringatan model tidak dikenal) hanya ditulis sekali di `AdbMessages`, jadi log, popup, dan teks status selalu sama.
+
+Warna ditentukan oleh `LogLevel`, format angka oleh `Fmt`. Aturan penulisan pesan ada di KDoc `LogLevel.kt`.
+
+## Catatan teknis
+- ADB memakai library [libadb-android](https://github.com/MuntashirAkon/libadb-android) (JitPack) + Conscrypt (TLS 1.3).
+- Kunci/sertifikat ADB dibuat sekali (`AdbManager.kt`) dan disimpan; pairing terikat pada kunci ini.
+- Install = `cmd package install -r -S <ukuran>` lewat stream `exec:` (setara `adb install -r`).
+- Package id `co.sat.hmdminstaller`, minSdk 28 (Android 9+), build debug.
+
+## PENTING: belum pernah dikompilasi
+Proyek ini ditulis tanpa akses Android SDK/Maven, jadi belum dikompilasi atau diuji di perangkat.
+Kemungkinan perlu penyesuaian kecil, terutama di `AdbManager.kt` / `AdbController.kt`
+(nama method libadb-android) dan versi `libadb-android` di `app/build.gradle.kts` (cek tag terbaru di JitPack).
+Kirim pesan error build-nya jika ada, nanti diperbaiki.
+
+## Panduan tampilan (UI)
+Semua ukuran, jarak, dan warna diambil dari resource, termasuk untuk tampilan yang dibuat lewat kode Kotlin. Jangan menulis angka langsung seperti `dp(12)` atau `textSize = 14f`.
+- **Jarak**: `space_xs 4 · sm 8 · md 12 · lg 16 · xl 20 · 2xl 24` dp (`dimens.xml`). Di Kotlin: `px(R.dimen.space_md)`.
+- **Teks**: `text_caption 12 · body 14 · card_title 16 · dialog_title 18 · title 20` sp. Di Kotlin: `setTextSizeRes(R.dimen.text_body)`. Angka PIN memakai `text_pin_digit`.
+- **Garis & elevasi**: `stroke_width`, `stroke_width_strong`, `overlay_elevation`, `dialog_elevation`.
+- **Warna**: `colors.xml`; gaya komponen: `themes.xml`.
+
+## Gaya kode
+- Konfigurasi editor di `.editorconfig` (UTF-8, LF, indentasi 4 spasi, maks. 150 karakter per baris Kotlin).
+- Workflow `Lint Kotlin` (`.github/workflows/lint.yml`) menjalankan ktlint di GitHub Actions. Saat ini hanya melapor
+  dan tidak menggagalkan build APK; hapus `continue-on-error` bila temuan sudah bersih.
