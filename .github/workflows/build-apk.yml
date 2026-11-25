@@ -1,0 +1,53 @@
+name: Build APK
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: 8.7
+
+      - name: Siapkan keystore rilis
+        env:
+          KEYSTORE_B64: ${{ secrets.HMDM_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Secret HMDM_KEYSTORE_B64 belum diisi (lihat README, bagian Build rilis)"; exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/hmdm-release.jks"
+          echo "HMDM_KEYSTORE_FILE=$RUNNER_TEMP/hmdm-release.jks" >> "$GITHUB_ENV"
+
+      - name: Build release APK (bertanda tangan)
+        env:
+          HMDM_KEYSTORE_PASSWORD: ${{ secrets.HMDM_KEYSTORE_PASSWORD }}
+          HMDM_KEY_ALIAS: ${{ secrets.HMDM_KEY_ALIAS }}
+          HMDM_KEY_PASSWORD: ${{ secrets.HMDM_KEY_PASSWORD }}
+        run: gradle :app:assembleRelease --no-daemon
+
+      - name: Verifikasi tanda tangan dan bukan debuggable
+        run: |
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          echo "APK: $APK"
+          "$BT/apksigner" verify --print-certs "$APK"
+          if "$BT/aapt2" dump badging "$APK" | grep -q "application-debuggable"; then
+            echo "::error::APK masih debuggable"; exit 1
+          fi
+
+      - name: Hapus keystore dari runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/hmdm-release.jks"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: HMDM-Installer-release-apk
+          path: app/build/outputs/apk/release/*.apk
